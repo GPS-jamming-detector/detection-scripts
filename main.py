@@ -69,12 +69,8 @@ class jamming_detector:
         gray_image = amplitude_norm.astype(np.uint8)
         # Zamiana osi żeby wyglądało jak w testach
         gray_image = gray_image.T  # transpozycja macierzy
-        # Przycięcie na interesujący nas fragment
-        desired_width = 2048
-        desired_height = 1024
-        gray_image_resized = cv2.resize(gray_image, (desired_width, desired_height), interpolation=cv2.INTER_LINEAR)
         # Zamiana góry obrazu z dołem
-        gray_image_flipped = cv2.flip(gray_image_resized, 0)
+        gray_image_flipped = cv2.flip(gray_image, 0)
         pil_img = Image.fromarray(gray_image_flipped)
         transform = transforms.Compose([
         transforms.Grayscale(num_output_channels=3),  # ResNet expects 3-channel input
