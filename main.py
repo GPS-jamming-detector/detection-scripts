@@ -21,6 +21,10 @@ class jamming_detector:
         self.configure_sdr()
         self.load_model()
 
+    def __del__(self):
+        self.sdr.deactivateStream(self.rxStream)
+        self.sdr.closeStream(self.rxStream)
+
     def configure_sdr(self):
         # Set sample rate and frequency
         self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
@@ -32,27 +36,27 @@ class jamming_detector:
             self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
         else:
             self.sdr.setGainMode(SOAPY_SDR_RX, 0, True)
+        self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        self.sdr.activateStream(self.rxStream)
         SoapySDR.setLogLevel(SOAPY_SDR_WARNING)
     
     def get_spectrogram(self):
-        rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-        self.sdr.activateStream(rxStream)
+        
         num_samples = self.samples
         buff = np.empty(num_samples, dtype=np.complex64)
         total_received = 0
-
+        start = time.perf_counter()
         # Rx samples in loop
         while total_received < num_samples:
-            sr = self.sdr.readStream(rxStream, [buff[total_received:]], num_samples - total_received)
+            sr = self.sdr.readStream(self.rxStream, [buff[total_received:]], num_samples - total_received)
             if sr.ret > 0:
                 total_received += sr.ret
             else:
                 print("readStream error:", sr)
                 break
 
-        self.sdr.deactivateStream(rxStream)
-        self.sdr.closeStream(rxStream)
-
+        diff = time.perf_counter() - start
+        print(f"Recieving in {diff:.6f} sec")
         # STFT
         f, t, Zxx = stft(buff, fs=self.sample_rate, nperseg=1024, return_onesided=False)
         return Zxx
@@ -84,14 +88,14 @@ class jamming_detector:
     
     def load_model(self, model_path='resnet18_jamming_detector.pth', device=None):
         if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Load checkpoint
-        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
         
         # Method 1: Load the full model (easiest)
         model = checkpoint['model']
-        model = model.to(device)
+        model = model.to(self.device)
         model.eval()
         
         print(f"Model loaded successfully!")
@@ -101,14 +105,12 @@ class jamming_detector:
         self.model = model
         self.checkpoint = checkpoint
 
-    def predict_image(self, device=None, threshold=0.2):
-        if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def predict_image(self, threshold=0.2):
         
         # Preprocess image
-        image_tensor = self.spectrogram_to_img(self.get_spectrogram())
-        image_tensor = image_tensor.to(device)
-        
+        spectrogram = self.get_spectrogram()
+        image_tensor = self.spectrogram_to_img(spectrogram)
+        image_tensor = image_tensor.to(self.device)
         # Run inference
         with torch.no_grad():
             output = self.model(image_tensor)
@@ -116,7 +118,8 @@ class jamming_detector:
             confidence = output.squeeze()
             print(confidence)
             prediction = 'no_jamming' if confidence > threshold else 'jamming'
-        
+
+        end = time.perf_counter()
         return prediction, confidence
 
 if __name__ == "__main__":
