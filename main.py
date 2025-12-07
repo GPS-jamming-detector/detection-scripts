@@ -18,6 +18,7 @@ class jamming_detector:
         self.center_freq = center_freq
         self.gain = gain
         self.samples = samples
+        self.sample_buff = np.empty(self.samples, dtype=np.complex64)
         self.configure_sdr()
         self.load_model()
 
@@ -41,24 +42,18 @@ class jamming_detector:
         SoapySDR.setLogLevel(SOAPY_SDR_WARNING)
     
     def get_spectrogram(self):
-        
-        num_samples = self.samples
-        buff = np.empty(num_samples, dtype=np.complex64)
         total_received = 0
-        start = time.perf_counter()
         # Rx samples in loop
-        while total_received < num_samples:
-            sr = self.sdr.readStream(self.rxStream, [buff[total_received:]], num_samples - total_received)
+        while total_received < self.samples:
+            sr = self.sdr.readStream(self.rxStream, [self.sample_buff[total_received:]], self.samples - total_received)
             if sr.ret > 0:
                 total_received += sr.ret
             else:
                 print("readStream error:", sr)
                 break
 
-        diff = time.perf_counter() - start
-        print(f"Recieving in {diff:.6f} sec")
         # STFT
-        f, t, Zxx = stft(buff, fs=self.sample_rate, nperseg=1024, return_onesided=False)
+        f, t, Zxx = stft(self.sample_buff, fs=self.sample_rate, nperseg=1024, return_onesided=False)
         return Zxx
     
     def spectrogram_to_img(self, Zxx):
@@ -116,10 +111,8 @@ class jamming_detector:
             output = self.model(image_tensor)
             #confidence = torch.sigmoid(output[0]).item()
             confidence = output.squeeze()
-            print(confidence)
             prediction = 'no_jamming' if confidence > threshold else 'jamming'
 
-        end = time.perf_counter()
         return prediction, confidence
 
 if __name__ == "__main__":
