@@ -1,18 +1,16 @@
-import numpy as np
 from scipy.signal import stft
-import SoapySDR
-from SoapySDR import *
-import cv2
 from torchvision import transforms
 from PIL import Image
+import SoapySDR as soap
+import numpy as np
 import torch
 import time
 
 class jamming_detector:
     def __init__(self, sample_rate=1.8e6, center_freq=1575.42e6, gain=40, samples=1000000):
         # Initialize SDR device
-        devices = SoapySDR.Device.enumerate()
-        self.sdr = SoapySDR.Device(devices[0])
+        devices = soap.Device.enumerate()
+        self.sdr = soap.Device(devices[0])
 
         self.sample_rate = sample_rate
         self.center_freq = center_freq
@@ -28,18 +26,18 @@ class jamming_detector:
 
     def configure_sdr(self):
         # Set sample rate and frequency
-        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
-        self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+        self.sdr.setSampleRate(soap.SOAPY_SDR_RX, 0, self.sample_rate)
+        self.sdr.setFrequency(soap.SOAPY_SDR_RX, 0, self.center_freq)
 
         # Set gain
         if self.gain > 0:
-            self.sdr.setGainMode(SOAPY_SDR_RX, 0, False)
-            self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
+            self.sdr.setGainMode(soap.SOAPY_SDR_RX, 0, False)
+            self.sdr.setGain(soap.SOAPY_SDR_RX, 0, self.gain)
         else:
-            self.sdr.setGainMode(SOAPY_SDR_RX, 0, True)
-        self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+            self.sdr.setGainMode(soap.SOAPY_SDR_RX, 0, True)
+        self.rxStream = self.sdr.setupStream(soap.SOAPY_SDR_RX, soap.SOAPY_SDR_CF32)
         self.sdr.activateStream(self.rxStream)
-        SoapySDR.setLogLevel(SOAPY_SDR_WARNING)
+        soap.setLogLevel(soap.SOAPY_SDR_WARNING)
     
     def get_spectrogram(self):
         total_received = 0
@@ -69,8 +67,7 @@ class jamming_detector:
         # Zamiana osi żeby wyglądało jak w testach
         gray_image = gray_image.T  # transpozycja macierzy
         # Zamiana góry obrazu z dołem
-        gray_image_flipped = cv2.flip(gray_image, 0)
-        pil_img = Image.fromarray(gray_image_flipped)
+        pil_img = Image.fromarray(gray_image)
         transform = transforms.Compose([
         transforms.Grayscale(num_output_channels=3),  # ResNet expects 3-channel input
         transforms.Resize((224, 224)),  # ResNet18 default
@@ -100,7 +97,7 @@ class jamming_detector:
         self.model = model
         self.checkpoint = checkpoint
 
-    def predict_image(self, threshold=0.2):
+    def predict_image(self, threshold=0.3):
         
         # Preprocess image
         spectrogram = self.get_spectrogram()
