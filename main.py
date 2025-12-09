@@ -6,6 +6,9 @@ from torchvision import transforms
 from PIL import Image
 import torch
 import time
+import sys
+import csv
+import datetime
 
 class jamming_detector:
     def __init__(self, sample_rate=1.8e6, center_freq=1575.42e6, gain=40, samples=1000000):
@@ -114,16 +117,41 @@ class jamming_detector:
         return prediction, confidence
 
 if __name__ == "__main__":
+    out_file = sys.argv[1]
+
+    # Initialize detector
     detector = jamming_detector()
     detector.load_model()
-    times = []
-    for i in range(100):
-        start = time.perf_counter()
-        prediction, confidence = detector.predict_image()
-        end = time.perf_counter()
-        times.append(end - start)
-        print(f"Prediction: {prediction}, Confidence: {confidence:.4f}")
-        print(f"Run {i+1}: {times[-1]:.6f} sec")
 
-    avg_time = sum(times)/len(times)
-    print(f"\nAverage prediction time: {avg_time:.6f} sec")
+    # Open CSV and write header if new
+    write_header = False
+    try:
+        with open(out_file, "x"):
+            write_header = True
+    except FileExistsError:
+        pass  # File exists, append rows only
+
+    with open(out_file, "a", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+
+        if write_header:
+            writer.writerow(["timestamp", "runtime_sec", "prediction", "confidence"])
+
+        print(f"Logging predictions to {out_file}. Press Ctrl+C to stop.\n")
+
+        try:
+            while True:
+                start = time.perf_counter()
+                prediction, confidence = detector.predict_image()
+                end = time.perf_counter()
+
+                runtime = end - start
+                ts = datetime.utcnow().isoformat()
+
+                writer.writerow([ts, f"{runtime:.6f}", prediction, f"{confidence:.4f}"])
+                csvfile.flush()
+
+                print(f"{ts} | Pred: {prediction}, Conf: {confidence:.4f}, Time: {runtime:.6f}s")
+
+        except KeyboardInterrupt:
+            print("\nStopped by user. Exiting gracefully.")
