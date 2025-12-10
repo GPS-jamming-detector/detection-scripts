@@ -9,13 +9,15 @@ import time
 import sys
 import csv
 import datetime
+from datetime import timezone
 
 class jamming_detector:
-    def __init__(self, sample_rate=1.8e6, center_freq=1575.42e6, gain=40, samples=1000000):
+    def __init__(self, fname, sample_rate=1.8e6, center_freq=1575.42e6, gain=40, samples=1000000):
         # Initialize SDR device
         devices = SoapySDR.Device.enumerate()
         self.sdr = SoapySDR.Device(devices[0])
-
+        self.fname = fname
+        self.detection_counter = 0
         self.sample_rate = sample_rate
         self.center_freq = center_freq
         self.gain = gain
@@ -72,6 +74,9 @@ class jamming_detector:
         gray_image = gray_image.T  # transpozycja macierzy
         # Zamiana góry obrazu z dołem
         pil_img = Image.fromarray(gray_image)
+        img_name = "{}_{}.png".format(self.fname, self.detection_counter)
+        self.detection_counter += 1
+        pil_img.save(img_name)
         transform = transforms.Compose([
         transforms.Grayscale(num_output_channels=3),  # ResNet expects 3-channel input
         transforms.Resize((224, 224)),  # ResNet18 default
@@ -117,10 +122,11 @@ class jamming_detector:
         return prediction, confidence
 
 if __name__ == "__main__":
-    out_file = sys.argv[1]
-
+    out_file = sys.argv[1] + ".csv"
+    dt = datetime.datetime.now(timezone.utc)
+    a = dt.replace(tzinfo=timezone.utc)
     # Initialize detector
-    detector = jamming_detector()
+    detector = jamming_detector(fname=sys.argv[1])
     detector.load_model()
 
     # Open CSV and write header if new
@@ -138,6 +144,7 @@ if __name__ == "__main__":
             writer.writerow(["timestamp", "runtime_sec", "prediction", "confidence"])
 
         print(f"Logging predictions to {out_file}. Press Ctrl+C to stop.\n")
+        input("Press Enter to continue...")
 
         try:
             while True:
@@ -146,7 +153,7 @@ if __name__ == "__main__":
                 end = time.perf_counter()
 
                 runtime = end - start
-                ts = datetime.utcnow().isoformat()
+                ts = a.timestamp()
 
                 writer.writerow([ts, f"{runtime:.6f}", prediction, f"{confidence:.4f}"])
                 csvfile.flush()
