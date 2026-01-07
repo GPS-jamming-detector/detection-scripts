@@ -12,7 +12,7 @@ import datetime
 from datetime import timezone
 
 class jamming_detector:
-    def __init__(self, fname, sample_rate=1.8e6, center_freq=1575.42e6, gain=40, samples=1000000):
+    def __init__(self, fname, sample_rate=2.2e6, center_freq=1575.42e6, gain=40, samples=1000000):
         # Initialize SDR device
         devices = SoapySDR.Device.enumerate()
         self.sdr = SoapySDR.Device(devices[0])
